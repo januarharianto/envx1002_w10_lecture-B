@@ -1,4 +1,4 @@
 # About
-Lecture slides for ENVX1002 Week 9: Describing relationships - Part 2
+Lecture slides for ENVX1002 Week 10: Simple Linear Regression - Part 2
 
 
