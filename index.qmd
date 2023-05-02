@@ -1,0 +1,555 @@
+---
+title: "Simple Linear Regression - Part 2"
+subtitle: "ENVX1002 - Week 10"
+date: today
+date-format: "MMM YYYY"
+author: 
+  - name: Januar Harianto
+    affiliation: School of Life and Envoronmental Sciences
+institute: The University of Sydney
+format:
+  revealjs: 
+    theme: [default, theme.scss]
+    slide-number: c/t
+    code-copy: true
+    code-link: false
+    code-overflow: wrap
+    highlight-style: arrow
+    html-math-method: katex
+    embed-resources: false
+execute: 
+  eval: true
+  echo: true
+  freeze: auto  # re-render only when source changes
+editor_options: 
+  chunk_output_type: console
+  render-on-save: true  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+  message = FALSE, 
+  warning = FALSE,
+  cache = TRUE)
+
+if (!require("pacman")) install.packages("pacman", repos = "http://cran.us.r-project.org")
+pacman::p_load(tidyverse, cowplot, HistData, datasauRus, patchwork, broom, remotes)
+pacman::p_load_gh("datalorax/equatiomatic")
+
+ggplot2::theme_set(cowplot::theme_half_open())
+```
+
+# Inference
+
+What can we say about the model based on our data?
+
+> What can we understand about the relationship between `child` and `parent`?
+
+## The model so far
+
+```{r}
+library(HistData)
+data(Galton)
+fit <- lm(child ~ parent, data = Galton)
+summary(fit)
+```
+
+
+## Hypothesis testing
+
+How does our null ($H_0: \beta_1=0$) model compare to the linear ($H_0: \beta_1 \neq 0$) model?
+
+```{r}
+#| code-fold: true
+
+null_model <- Galton %>%
+  lm(child ~ 1, data = .) %>%
+  augment(Galton)
+lin_model <- Galton %>%
+  lm(child ~ parent, data = .) %>%
+  augment(Galton)
+models <- bind_rows(null_model, lin_model) %>%
+  mutate(model = rep(c("Null model", "SLR model"), each = nrow(Galton)))
+
+ggplot(data = models, aes(x = parent, y = child)) +
+  geom_smooth(
+    data = filter(models, model == "Null model"),
+    method = "lm", se = FALSE, formula = y ~ 1, size = 0.5
+  ) +
+  geom_smooth(
+    data = filter(models, model == "SLR model"),
+    method = "lm", se = FALSE, formula = y ~ x, size = 0.5
+  ) +
+  geom_segment(
+    aes(xend = parent, yend = .fitted),
+    arrow = arrow(length = unit(0.1, "cm")),
+    size = 0.3, color = "darkgray"
+  ) +
+  geom_point(alpha = .2) +
+  facet_wrap(~model) +
+  xlab("Parent height (in)") +
+  ylab("Child height (in)")
+```
+
+## What are we testing?
+
+- The null model is a model with no predictors, i.e. $y = \beta_0 + \epsilon$
+- The linear model is a model with one predictor, i.e. $y = \beta_0 + \beta_1 x + \epsilon$
+- We use the t-test to compare the two models:
+
+$$ t = \frac{estimate - 0}{Standard\ error} = \frac{\hat{\beta}_1 - 0}{SE(\hat{\beta}_1)} $$ where $SE(\hat{\beta}_1)$ is the standard error of the slope estimate:
+
+$$ SE(\hat{\beta}_1) = \frac{\hat{\sigma}}{\sqrt{\sum_{i=1}^n (x_i - \bar{x})^2}} $$
+
+# Assesing the model
+
+## Interpreting the output
+
+```{r}
+#| eval: false
+#| code-line-numbers: 1-2
+
+Call:
+lm(formula = child ~ parent, data = Galton)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-7.8050 -1.3661  0.0487  1.6339  5.9264 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 23.94153    2.81088   8.517   <2e-16 ***
+parent       0.64629    0.04114  15.711   <2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 2.239 on 926 degrees of freedom
+Multiple R-squared:  0.2105,    Adjusted R-squared:  0.2096 
+F-statistic: 246.8 on 1 and 926 DF,  p-value: < 2.2e-16
+```
+
+- `Call`: the model formula
+
+## Interpreting the output
+
+```{r}
+#| eval: false
+#| code-line-numbers: 4-6
+
+Call:
+lm(formula = child ~ parent, data = Galton)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-7.8050 -1.3661  0.0487  1.6339  5.9264 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 23.94153    2.81088   8.517   <2e-16 ***
+parent       0.64629    0.04114  15.711   <2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 2.239 on 926 degrees of freedom
+Multiple R-squared:  0.2105,    Adjusted R-squared:  0.2096 
+F-statistic: 246.8 on 1 and 926 DF,  p-value: < 2.2e-16
+```
+
+- `Residuals`: distribution of the residuals
+
+## Interpreting the output
+
+```{r}
+#| eval: false
+#| code-line-numbers: 8-9
+
+Call:
+lm(formula = child ~ parent, data = Galton)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-7.8050 -1.3661  0.0487  1.6339  5.9264 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 23.94153    2.81088   8.517   <2e-16 ***
+parent       0.64629    0.04114  15.711   <2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 2.239 on 926 degrees of freedom
+Multiple R-squared:  0.2105,    Adjusted R-squared:  0.2096 
+F-statistic: 246.8 on 1 and 926 DF,  p-value: < 2.2e-16
+```
+
+- `Coefficients`: a summary table of the coefficients, their standard errors, t-values, and p-values addressing the hypothesis that the coefficient is 0
+
+
+## Interpreting the output
+
+```{r}
+#| eval: false
+#| code-line-numbers: 10-12
+
+Call:
+lm(formula = child ~ parent, data = Galton)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-7.8050 -1.3661  0.0487  1.6339  5.9264 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 23.94153    2.81088   8.517   <2e-16 ***
+parent       0.64629    0.04114  15.711   <2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 2.239 on 926 degrees of freedom
+Multiple R-squared:  0.2105,    Adjusted R-squared:  0.2096 
+F-statistic: 246.8 on 1 and 926 DF,  p-value: < 2.2e-16
+```
+
+- `(Intercept)` term is the mean of the response **when all predictors are 0**, which is not meaningful in most cases. In this case, it is the mean child height when the parent height is 0.
+- `parent`: the **slope** coefficient that we are interested in, which represents the change in the **mean** of the response for a **one-unit increase in the predictor**.
+  - The *p-value* (`Pr`) tells us whether the slope is significantly different from 0.
+  - If it is, then we can conclude that there is a **significant linear relationship** between the predictor and the response.
+
+
+## Interpreting the output
+
+```{r}
+#| eval: false
+#| code-line-numbers: 10-11
+
+Call:
+lm(formula = child ~ parent, data = Galton)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-7.8050 -1.3661  0.0487  1.6339  5.9264 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 23.94153    2.81088   8.517   <2e-16 ***
+parent       0.64629    0.04114  15.711   <2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 2.239 on 926 degrees of freedom
+Multiple R-squared:  0.2105,    Adjusted R-squared:  0.2096 
+F-statistic: 246.8 on 1 and 926 DF,  p-value: < 2.2e-16
+```
+
+- We can also use the `Estimate` values to write the equation of the regression line:
+$$ \widehat{child} = 23.94153 + 0.64629 \cdot parent$$
+
+- For every one-inch increase in the parent height, the child height is predicted to increase by 0.64629 inches.
+
+
+## Interpreting the output
+
+```{r}
+#| eval: false
+#| code-line-numbers: 10-11
+
+Call:
+lm(formula = child ~ parent, data = Galton)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-7.8050 -1.3661  0.0487  1.6339  5.9264 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 23.94153    2.81088   8.517   <2e-16 ***
+parent       0.64629    0.04114  15.711   <2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 2.239 on 926 degrees of freedom
+Multiple R-squared:  0.2105,    Adjusted R-squared:  0.2096 
+F-statistic: 246.8 on 1 and 926 DF,  p-value: < 2.2e-16
+```
+
+- We can also use the `Estimate` values to write the equation of the regression line:
+$$ \widehat{child} = 23.94153 + 0.64629 \cdot parent$$
+
+- For every one-inch increase in the parent height, the child height is predicted to increase by 0.64629 inches.
+
+## Interpreting the output
+
+```{r}
+#| eval: false
+#| code-line-numbers: 15-15
+
+Call:
+lm(formula = child ~ parent, data = Galton)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-7.8050 -1.3661  0.0487  1.6339  5.9264 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 23.94153    2.81088   8.517   <2e-16 ***
+parent       0.64629    0.04114  15.711   <2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 2.239 on 926 degrees of freedom
+Multiple R-squared:  0.2105,    Adjusted R-squared:  0.2096 
+F-statistic: 246.8 on 1 and 926 DF,  p-value: < 2.2e-16
+```
+
+- `Residual standard error`: the standard deviation of the residuals. 
+  -  Interpretation: the average amount that the response will *deviate* from the true regression line.
+-  `degrees of freedom`: the number of observations minus the number of parameters being estimated. Used in hypothesis testing and calculating the standard error of the regression coefficients. 
+   - Can estimate sample size from this number. 
+
+## Interpreting the output
+
+```{r}
+#| eval: false
+#| code-line-numbers: 16-16
+
+Call:
+lm(formula = child ~ parent, data = Galton)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-7.8050 -1.3661  0.0487  1.6339  5.9264 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 23.94153    2.81088   8.517   <2e-16 ***
+parent       0.64629    0.04114  15.711   <2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 2.239 on 926 degrees of freedom
+Multiple R-squared:  0.2105,    Adjusted R-squared:  0.2096 
+F-statistic: 246.8 on 1 and 926 DF,  p-value: < 2.2e-16
+```
+
+- `Multiple R-squared`: the proportion of variance explained by the model.
+- `Adjusted R-squared`: the proportion of variance explained by the model, adjusted for the number of predictors.
+- Interpretation:
+  - Ranges from 0 to 1.
+  - Since this is SLR, we can interpret this as the proportion of variance in the response that is explained by `parent`: 21.05% (from Multiple R-squared).
+
+## Interpreting the output
+
+```{r}
+#| eval: false
+#| code-line-numbers: 17-17
+
+Call:
+lm(formula = child ~ parent, data = Galton)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-7.8050 -1.3661  0.0487  1.6339  5.9264 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 23.94153    2.81088   8.517   <2e-16 ***
+parent       0.64629    0.04114  15.711   <2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+
+Residual standard error: 2.239 on 926 degrees of freedom
+Multiple R-squared:  0.2105,    Adjusted R-squared:  0.2096 
+F-statistic: 246.8 on 1 and 926 DF,  p-value: < 2.2e-16
+```
+
+- `F-statistic`: the ratio of the variance of the regression model to the variance of the residuals.
+  - Also known as the partial F-test between the full model and the intercept-only (null) model.
+- `p-value`: for the linear model, the p-value is the probability that the F-statistic is greater than the observed value under the null hypothesis.
+  - A significant p-value indicates that the linear model is a better fit than the intercept-only model.
+
+# Reporting
+
+## Two methods
+
+:::: {.columns}
+::: {.column width="50%"}
+### Using ANOVA
+
+### `anova(fit)`
+
+```{r}
+fit <- lm(formula = child ~ parent, data = Galton)
+anova(fit)
+```
+:::
+
+::: {.column width="50%"}
+### Using Regression
+
+### `summary(fit)`
+```{r}
+summary(fit)
+```
+:::
+::::
+
+## Two methods
+
+:::: {.columns}
+::: {.column width="50%"}
+### Using ANOVA
+
+> The ANOVA suggests that the main effect of parent is statistically significant and large (F(1, 926) = 246.84, p < .001)
+:::
+
+::: {.column width="50%"}
+### Using Regression
+> We fitted a linear model (estimated using OLS) to predict child with parent (formula: child ~ parent). The model explains a statistically significant and moderate proportion of variance (R^2^ = 0.21, F(1, 926) = 246.84, p < .001, adj. R^2^ = 0.21). Within this model, the effect of parent is statistically significant and positive ($\beta$ = 0.65, t(926) = 15.71, p < .001).
+:::
+::::
+
+. . .
+
+:::{.callout-tip}
+For **simple linear models**, `summary()` provides more information than `anova()`, but the results are the same.
+:::
+
+# Let's practice
+Can we predict the weight of an alligator from its length?
+[Download data ⬇](https://canvas.sydney.edu.au/courses/46921/pages/week-10-lectures-linear-functions?module_item_id=1752336)
+
+![](assets/alligator.jpg){width=70%}
+
+Photo by <a href="https://unsplash.com/@eyedealstuff?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Shelly Collins</a>
+
+## Explore
+
+Read the data:
+
+```{r}
+library(readxl) # load the readxl package
+
+alligator <- read_excel(path = "assets/ENVX1002_Lecture_wk10_data.xlsx", 
+  sheet = "Alligator") # read in the data
+```
+
+What does the data look like?
+
+```{r}
+str(alligator)
+```
+
+## Plot
+
+::: {.panel-tabset}
+## Using base R
+
+```{r}
+plot(x = alligator$Length, y = alligator$Weight, 
+  xlab = "Length (cm)", ylab = "Weight (kg)")
+```
+
+## Using `ggplot2`
+
+```{r}
+library(ggplot2) # load the ggplot2 package
+ggplot(data = alligator, aes(x = Length, y = Weight)) +
+  geom_point() +
+  labs(x = "Length (cm)", y = "Weight (kg)")
+```
+
+:::
+
+## Plot residual diagnostics
+
+To check assumptions, we need to fit the model first, then plot the model.
+
+```{r}
+fit <- lm(formula = Weight ~ Length, data = alligator)
+par(mfrow = c(2, 2)) # set up a 2 x 2 grid for plots
+plot(fit)
+```
+
+## Check assumptions
+
+### Is the relationship linear?
+
+```{r}
+plot(fit, which = 1)
+```
+
+If the linearity assumption is violated, there is no reason to validate the model since it is no longer suitable for the data.
+
+## Dealing with non-linearity: transform the data
+
+```{r}
+#| code-fold: true
+#| layout-ncol: 2
+#| 
+ggplot(data = alligator, aes(x = Length, y = Weight)) +
+  geom_point(size = 3) +
+  labs(x = "Length (cm)", y = "Weight (kg)", title = "Original") +
+  geom_smooth(se = FALSE, linetype = 2)
+
+ggplot(data = alligator, aes(x = Length, y = sqrt(Weight))) +
+  geom_point(size = 3) +
+  labs(x = "Length (cm)", y = "sqrt[Weight (kg)]", title = "Square root") +
+  geom_smooth(se = FALSE, linetype = 2)
+
+ggplot(data = alligator, aes(x = Length, y = log(Weight))) +
+  geom_point(size = 3) +
+  labs(x = "Length (cm)", y = "log[Weight (kg)]", title = "Natural log") +
+  geom_smooth(se = FALSE, linetype = 2)
+
+ggplot(data = alligator, aes(x = Length, y = log10(Weight))) +
+  geom_point(size = 3) +
+  labs(x = "Length (cm)", y = "log10[Weight (kg)]", title = "Log base 10") +
+  geom_smooth(se = FALSE, linetype = 2)
+```
+
+## Natural log transformation
+
+```{r}
+fit <- lm(formula = log(Weight) ~ Length, data = alligator)
+plot(fit, which = 1)
+```
+
+## Check assumptions again
+
+```{r}
+par(mfrow = c(2, 2)) # set up a 2 x 2 grid for plots
+plot(fit)
+```
+
+## Interpretation
+
+```{r}
+summary(fit)
+```
+
+- `Length` is a statistically significant predictor of `log(Weight)` (p < .001).
+- The model explains a statistically significant and large proportion (96%) of variance (R^2^ = 0.96, F(1, 23) = 553, p < .001)
+- For every 1 cm increase in `Length`, `log(Weight)` increases by 0.0354.
+  - *Or, for every 1 cm increase in `Length`, percent increase in `Weight` is 3.54% (only works when transforming using natural log).*
+
+# Another practice example
+Is there a relationship between soil pH and slope?
+
+![](assets/slope.jpg){width=70%}
+
+Photo by <a href="https://unsplash.com/@jakubkriz?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Jakub Kriz</a> 
+
+## You should know the workflow by now
+
+1.  Explore
+2.  Plot
+3.  Fit model and plot residual diagnostics
+4.  Check assumptions, transform data if necessary. Go back to step 3.
+5.  Interpret
+
+# Thanks
+
+**Questions? Comments?**
+
+Slides made with [Quarto](https://quarto.org)
